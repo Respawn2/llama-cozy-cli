@@ -44,13 +44,18 @@ fi
 USER_SHELL=$(basename "$SHELL")
 echo "🔍 Detected shell: $USER_SHELL"
 
-DEFAULT_DIR="$HOME/.lm-studio/models"
+DEFAULT_DIR="$HOME/.lmstudio/models"
 read -p "📂 Specify the path to your .gguf models folder [$DEFAULT_DIR]: " USER_DIR
 USER_DIR=${USER_DIR:-$DEFAULT_DIR}
 
 if [ ! -d "$USER_DIR" ]; then
     echo "⚠️  Warning: Target directory $USER_DIR does not exist yet."
 fi
+
+DEFAULT_PROMPT="You are a helpful, concise, and highly intelligent AI assistant. Provide accurate, structured, and direct answers without unnecessary fluff."
+echo "📝 Enter your custom system prompt (press Enter to use default):"
+read -p "💬 Prompt: " USER_PROMPT
+USER_PROMPT=${USER_PROMPT:-$DEFAULT_PROMPT}
 
 # --- Fish Installation ---
 if [ "$USER_SHELL" == "fish" ]; then
@@ -71,11 +76,12 @@ if [ "$USER_SHELL" == "fish" ]; then
 
     # Smart duplication protection via sed: remove old blocks if they exist
     if grep -q "LLAMA_MODELS_DIR" "$FISH_CONFIG" 2>/dev/null; then
-        sed -i '/# === Added by llama-cozy-cli ===/,/set -gx LLAMA_MODELS_DIR/d' "$FISH_CONFIG"
+        sed -i '/# === Added by llama-cozy-cli ===/,/set -gx LLAMA_PROMPT/d' "$FISH_CONFIG"
     fi
 
     # Append fresh configuration block
-    echo -e "\n# === Added by llama-cozy-cli ===\nset -gx LLAMA_MODELS_DIR \"$USER_DIR\"" >> "$FISH_CONFIG"
+    echo -e "\n# === Added by llama-cozy-cli ===\nset -gx LLAMA_MODELS_DIR \"$USER_DIR\"\nset -gx LLAMA_PROMPT \"$USER_PROMPT\"" >> "$FISH_CONFIG"
+
     echo "✅ Configuration block updated safely in $FISH_CONFIG"
     echo "🎉 Installation for Fish completed successfully!"
 
@@ -86,6 +92,7 @@ elif [ "$USER_SHELL" == "bash" ] || [ "$USER_SHELL" == "zsh" ]; then
     cat << 'EOF' > "$COZY_ENV_FILE"
 # === Llama.cpp Cozy CLI Env ===
 export LLAMA_MODELS_DIR="REPLACE_PATH"
+export LLAMA_PROMPT="REPLACE_PROMPT"
 
 ai() {
     if [ -z "$1" ]; then
@@ -112,7 +119,7 @@ ai() {
         --color \
         -i \
         -r "User:" \
-        -p "System: You are a helpful assistant. Please reply in Russian by default.\nUser: Hello!\nAI: Привет!\n"
+        -p "System: $LLAMA_PROMPT\nUser: Hello!\nAI: Hello!\n"
 }
 
 ailist() {
@@ -126,6 +133,7 @@ ailist() {
 EOF
 
     sed -i "s|REPLACE_PATH|$USER_DIR|g" "$COZY_ENV_FILE"
+    sed -i "s|REPLACE_PROMPT|$USER_PROMPT|g" "$COZY_ENV_FILE"
     echo "📂 Environment script updated at $COZY_ENV_FILE"
 
     if ! grep -q "llama-cozy-env" "$RC_FILE" 2>/dev/null; then
