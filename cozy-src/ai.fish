@@ -4,10 +4,10 @@ function ai --description "Cozy CLI launcher for llama.cpp models"
         return 1
     end
 
-    set -l search_term $argv[1]
+    set -l search_term $argv
 
-    # Locate the first matching .gguf file
-    set -l model_path (command find $LLAMA_MODELS_DIR -type f -name "*$search_term*.gguf" 2>/dev/null | head -n 1)
+    # Recursive deep search for .gguf files, explicitly excluding mmproj files
+    set -l model_path (command find $LLAMA_MODELS_DIR -type f -name "*$search_term*.gguf" ! -name "mmproj*" 2>/dev/null | head -n 1)
 
     if test -z "$model_path"
         echo "❌ Error: Model pattern '$search_term' not found in $LLAMA_MODELS_DIR"
@@ -26,5 +26,5 @@ function ai --description "Cozy CLI launcher for llama.cpp models"
         --color \
         -i \
         -r "User:" \
-        -p "System: You are a helpful assistant. Please reply in Russian by default.\nUser: Hello!\nAI: Привет! Я готов к работе. О чём поговорим?\n"
+        -p "System: $LLAMA_PROMPT\nUser: Hello!\nAI: Hello!\n"
 end
