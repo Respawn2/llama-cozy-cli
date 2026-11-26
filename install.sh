@@ -44,7 +44,7 @@ fi
 USER_SHELL=$(basename "$SHELL")
 echo "🔍 Detected shell: $USER_SHELL"
 
-DEFAULT_DIR="$HOME/.cache/lm-studio/models"
+DEFAULT_DIR="$HOME/.lm-studio/models"
 read -p "📂 Specify the path to your .gguf models folder [$DEFAULT_DIR]: " USER_DIR
 USER_DIR=${USER_DIR:-$DEFAULT_DIR}
 
