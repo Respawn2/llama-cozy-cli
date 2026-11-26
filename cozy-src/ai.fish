@@ -1,22 +1,22 @@
-function ai --description "Уютный запуск ИИ-модели по части имени"
+function ai --description "Cozy CLI launcher for llama.cpp models"
     if test (count $argv) -eq 0
-        echo "❌ Ошибка: Укажи часть имени модели (например: ai bonsai)"
+        echo "❌ Error: Please specify a model name pattern (e.g., ai bonsai)"
         return 1
     end
 
     set -l search_term $argv[1]
 
-    # Ищем первый подходящий .gguf файл по ключевому слову
+    # Locate the first matching .gguf file
     set -l model_path (command find $LLAMA_MODELS_DIR -type f -name "*$search_term*.gguf" 2>/dev/null | head -n 1)
 
     if test -z "$model_path"
-        echo "❌ Модель со словом '$search_term' не найдена в $LLAMA_MODELS_DIR"
+        echo "❌ Error: Model pattern '$search_term' not found in $LLAMA_MODELS_DIR"
         return 1
     end
 
     set -l model_name (basename "$model_path")
-    echo "🚀 Найдена модель: $model_name"
-    echo "🔥 Запуск на полную мощность GPU (Nvidia)..."
+    echo "🚀 Found model: $model_name"
+    echo "🔥 Initializing GPU acceleration (Nvidia CUDA)..."
 
     command llama-cli \
         -m "$model_path" \
@@ -26,5 +26,5 @@ function ai --description "Уютный запуск ИИ-модели по ча
         --color \
         -i \
         -r "User:" \
-        -p "User: Привет!\nAI: Привет! Я готов к работе. О чём поговорим?\n"
+        -p "System: You are a helpful assistant. Please reply in Russian by default.\nUser: Hello!\nAI: Привет! Я готов к работе. О чём поговорим?\n"
 end

@@ -1,69 +1,61 @@
-# 🦙 llama-cozy-cli
+# llama-cozy-cli
 
-> **Cozy** (англ. *уютный, удобный*) + Локальный мем: *«Идёт коза рогатая за жирными процессами...»* 🐐
+> **Cozy CLI** — A lightweight, modular automation tool for streamlining interactions with the `llama.cpp` command-line interface on Linux systems.
 
-Минималистичный, нативный и ультра-быстрый инструмент автоматизации для `llama.cpp` под Linux shell (Fish / Bash / Zsh). Создан специально для тех, кто **дико задолбался** от тяжеловесных Electron-интерфейсов (вроде LM Studio) и бесконечных 100-символьных монстр-команд в терминале.
+This project serves as a high-performance alternative to resource-heavy Electron-based graphical environments (such as LM Studio) and persistent background system daemons (such as Ollama). It provides instant, isolated access to local LLMs while ensuring that system RAM and VRAM are fully released immediately after the chat session is terminated.
 
-## 🎯 Философия проекта
-Зачем держать запущенным прожорливый GUI-комбайн или фоновый сервис Ollama, который постоянно отъедает оперативную память и ресурсы GPU? 
-`llama-cozy-cli` превращает оригинальный, чистый и эффективный бинарник `llama-cli` в удобный инструмент. Вы запускаете модель одной короткой командой, общаетесь, а после закрытия (`Ctrl+C`) система мгновенно освобождает память до последнего байта.
+## 🎯 Core Concept
+The primary objective of `llama-cozy-cli` is to eliminate background resource consumption during local LLM execution. Unlike traditional server solutions that continuously hold allocated GPU memory, this tool initiates the native `llama-cli` binary strictly for the duration of an active dialogue. Upon session termination (`Ctrl+C`), the process exits cleanly and instantly yields all resources back to the operating system.
 
-## ✨ Особенности
-- 🚀 **Запуск в 2 буквы:** Команда `ai <имя_модели>` автоматически находит нужный `.gguf` файл в вашем кэше и запускает чат.
-- 🧠 **Умный поиск:** Не нужно писать полное имя файла вроде `bonsai-2-9b-Q4_K_M.gguf`. Достаточно написать `ai bonsai` — скрипт сам найдет первую подходящую модель.
-- 🔥 **Аппаратный выжим:** Из коробки настроен проброс всех слоев нейросети в GPU Nvidia (`-ngl 99`) и активирована технология `Flash Attention` для молниеносной обработки контекста.
-- 📁 **Интеграция с LM Studio:** Скрипт умеет использовать уже скачанные вами модели из кэша LM Studio, избавляя от необходимости переносить или заново скачивать файлы.
-- 🧼 **Абсолютная чистота:** Ноль фоновых процессов. Ноль фонового потребления ресурсов.
+## ✨ Key Features
+- 🚀 **Streamlined Execution:** Encapsulates complex, multi-parameter console commands into concise, native `ai` and `ailist` shell functions.
+- 🧠 **Predictive Model Matching:** The underlying logic allows model lookups by partial name patterns, eliminating the need to input lengthy, absolute filename specifications.
+- 🔥 **Hardware Acceleration:** Out-of-the-box configuration for complete VRAM offloading to Nvidia GPUs via CUDA (`-ngl 99`) and automated activation of `Flash Attention` for accelerated context processing.
+- 📁 **Ecosystem Compatibility:** Native support for existing model cache paths from third-party applications (including LM Studio), preventing redundant file duplication on storage drives.
+- 🧼 **Idempotent & Modular Installer:** Safe setup script featuring smart duplication protection (rewriting paths instead of appending duplicates) and a clean uninstallation routine.
 
-## 🛠️ Установка
+## 🛠️ System Requirements & Dependencies
+To ensure proper functionality, verify that the following dependencies are available in your system:
+1. **`llama.cpp`** toolchain (the `llama-cli` binary must be accessible globally within your `$PATH`).
+2. A compatible shell environment: **Fish**, **Bash**, or **Zsh**.
+3. The `find` utility (POSIX-compliant).
 
-### Быстрый старт (для Fish shell)
-Если вы используете **Fish**, просто добавьте следующие функции в ваш конфигурационный файл `~/.config/fish/config.fish`:
+## 📦 Installation & Setup
 
-```fish
-# Путь к вашей папке с моделями .gguf (по умолчанию указан кэш LM Studio)
-set -gx LLAMA_MODELS_DIR "\$HOME/.cache/lm-studio/models"
+The project includes an interactive, cross-shell deployment script. To integrate the utilities into your active shell environment, run the following commands in your terminal:
 
-function ai
-    if test (count \$argv) -eq 0
-        echo "❌ Укажи часть имени модели (например: ai bonsai)"
-        return 1
-    end
-    set model_path (find \$LLAMA_MODELS_DIR -type f -name "*\$argv*.gguf" | head -n 1)
-    if test -z "\$model_path"
-        echo "❌ Модель со словом '\$argv' не найдена"
-        return 1
-    end
-    echo "🚀 Запуск: (basename \$model_path) на GPU..."
-    llama-cli -m "\$model_path" -ngl 99 --flash-attn -c 4096 --color -i -r "User:" -p "User: Привет!\nAI: Привет! Я готов.\n"
-end
+1. Grant execution permissions to the installer:
+   ```bash
+   chmod +x install.sh
+   ```
+2. Execute the installation routine:
+   ```bash
+   ./install.sh
+   ```
+3. The script will automatically detect your active shell interpreter, copy the modular auto-loaded functions (or environment hooks), and prompt you for the target directory containing your `.gguf` models.
 
-function ailist
-    echo "📂 Доступные локальные модели:"
-    find \$LLAMA_MODELS_DIR -type f -name "*.gguf" | while read -l file
-        echo "• (basename file) ("(ls -lh "file" | awk '{print \$5}')")"
-    end
-end
-```
+## 🕹️ User Guide
 
-*После добавления обновите шелл командой: `source ~/.config/fish/config.fish`*
+After restarting your terminal emulator or sourcing its configuration file, two primary commands become available globally:
 
-## 🕹️ Как пользоваться
-
-1. Посмотреть список всех доступных локальных моделей и их размер:
+1. **Display all cached local models along with their file sizes:**
    ```bash
    ailist
    ```
-2. Запустить модель (например, Bonsai 2 или Llama) в режиме интерактивного диалога:
+2. **Initialize an interactive chat session with a model (via a keyword pattern):**
    ```bash
-   ai bonsai
+   ai <model_name_pattern>
    ```
-3. Выйти из чата и полностью очистить ОЗУ/VRAM:
-   Нажмите **`Ctrl + C`**.
+   *Example:* Running `ai bonsai` will automatically resolve the exact path of the matching Bonsai model within your cache directory and deploy a CLI chat context mapped to 4,096 tokens.
 
-## 🤝 Разработка и планы (Roadmap)
-- [ ] Написать универсальный интерактивный `install.sh`
-- [ ] Добавить полноценную поддержку Bash и Zsh синтаксиса
-- [ ] Добавить кастомизацию системного промпта через флаги
+3. **Termination:**
+   To close the active session and completely purge the model from your system's RAM/VRAM, issue a standard process interrupt via **`Ctrl + C`**.
 
-Проект открытый. Если вы тоже задолбались — добро пожаловать в Pull Requests!
+## 🧼 Uninstallation
+If you wish to remove the tool and restore your configuration files to their pristine state, run the installer with the `--uninstall` flag:
+```bash
+./install.sh --uninstall
+```
+
+## ⚖️ License
+This software is open-source and distributed under the terms of the MIT License. You are free to use, modify, and distribute it for both personal and commercial applications.
