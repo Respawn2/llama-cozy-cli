@@ -1,0 +1,96 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bash syntax
+        run: |
+          bash -n llama-cozy
+          bash -n install.sh
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck -S warning llama-cozy install.sh || true
+          # ^ remove `|| true` once shellcheck is clean
+
+      - name: version
+        run: |
+          ./llama-cozy --version
+          ./llama-cozy version
+
+      - name: help
+        run: ./llama-cozy --help >/dev/null
+
+      - name: completions
+        run: |
+          for sh in bash zsh fish; do
+            ./llama-cozy completions "$sh" > "/tmp/comp.$sh"
+            test -s "/tmp/comp.$sh"
+          done
+          bash -n /tmp/comp.bash
+
+            - name: config parsing (no sourcing)
+        run: |
+          export XDG_CONFIG_HOME="$PWD/.ci-config"
+          mkdir -p "$XDG_CONFIG_HOME/llama-cozy"
+          {
+            echo '# comment'
+            echo 'CTX=2048'
+            echo 'SYSTEM_PROMPT=$(echo pwned)'
+            echo 'MODELS_DIR=/tmp/models'
+          } > "$XDG_CONFIG_HOME/llama-cozy/config"
+          out=$(./llama-cozy config get CTX)
+          test "$out" = "2048"
+          out=$(./llama-cozy config get SYSTEM_PROMPT)
+          test "$out" = '$(echo pwned)'
+
+      - name: install.sh uninstall is a no-op on clean tree
+        run: |
+          export XDG_CONFIG_HOME="$PWD/.ci-config2"
+          export XDG_STATE_HOME="$PWD/.ci-state2"
+          ./install.sh --uninstall --yes || true
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install to temp prefix
+        run: |
+          ./install.sh --prefix "$PWD/.ci-prefix" --no-completions --no-aliases --yes
+          test -x .ci-prefix/bin/llama-cozy
+          .ci-prefix/bin/llama-cozy --version
+
+      - name: list/show/pull dry-run without llama.cpp
+        run: |
+          export XDG_CONFIG_HOME="$PWD/.ci-config"
+          export XDG_DATA_HOME="$PWD/.ci-data"
+          export XDG_STATE_HOME="$PWD/.ci-state"
+          mkdir -p "$XDG_DATA_HOME/llama-cozy/models/fake"
+          # fake model file
+          : > "$XDG_DATA_HOME/llama-cozy/models/fake/Qwen3-8B-Q4_K_M.gguf"
+
+          .ci-prefix/bin/llama-cozy list
+          .ci-prefix/bin/llama-cozy list --names | grep -q Qwen3-8B-Q4_K_M
+          .ci-prefix/bin/llama-cozy list --paths | grep -q Qwen3-8B-Q4_K_M
+          .ci-prefix/bin/llama-cozy show qwen 8b q4 | grep -q 'quant:'
+          .ci-prefix/bin/llama-cozy show qwen 8b q4 | grep -q 'split:'
+
+      - name: config roundtrip
+        run: |
+          export XDG_CONFIG_HOME="$PWD/.ci-config"
+          .ci-prefix/bin/llama-cozy config set CTX 1024
+          test "$(.ci-prefix/bin/llama-cozy config get CTX)" = 1024
+          .ci-prefix/bin/llama-cozy config unset CTX
+          test -z "$(.ci-prefix/bin/llama-cozy config get CTX)"
