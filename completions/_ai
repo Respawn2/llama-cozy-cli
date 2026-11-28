@@ -1,0 +1,38 @@
+#compdef ai ailist
+# zsh completions for llama-cozy
+
+_ai() {
+    local -a cmds models keys
+    cmds=(
+        'run:chat with a model'
+        'list:list local models'
+        'serve:start OpenAI-compatible server'
+        'pull:download a GGUF from Hugging Face'
+        'rm:delete a model'
+        'bench:benchmark a model'
+        'doctor:check the setup'
+        'config:show or change settings'
+        'help:show help'
+    )
+    models=(${(f)"$(command ai list --names 2>/dev/null)"})
+    keys=(MODELS_DIR SYSTEM_PROMPT CTX GPU_LAYERS HOST PORT BIN_DIR EXTRA_ARGS)
+
+    if (( CURRENT == 2 )); then
+        _describe -t commands 'command' cmds
+        compadd -a models
+        return
+    fi
+    case $words[2] in
+        run|chat|serve|rm|remove|bench)
+            if [[ $words[CURRENT] == -* ]]; then
+                compadd -- --ctx --system --prompt --cpu --port --host --yes
+            else
+                compadd -a models
+            fi ;;
+        config)
+            if (( CURRENT == 3 )); then compadd show path edit get set
+            else compadd -a keys; fi ;;
+    esac
+}
+
+_ai "$@"
