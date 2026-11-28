@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+printf 'ARGV:'
+for a in "$@"; do printf ' %q' "$a"; done
+printf '\n'
+exit 0

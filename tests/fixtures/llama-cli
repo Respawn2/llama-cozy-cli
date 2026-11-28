@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Fake llama-cli: echo args, exit 0
+printf 'ARGV:'
+for a in "$@"; do printf ' %q' "$a"; done
+printf '\n'
+# respond to --help like real llama.cpp (for --system-prompt detection)
+for a in "$@"; do
+    if [ "$a" = "--help" ]; then
+        echo "usage: llama-cli [options]"
+        echo "  --system-prompt PROMPT  set system prompt"
+        exit 0
+    fi
+done
+exit 0

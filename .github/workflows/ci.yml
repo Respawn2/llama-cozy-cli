@@ -21,8 +21,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck -S warning llama-cozy install.sh || true
-          # ^ remove `|| true` once shellcheck is clean
+          shellcheck -S warning llama-cozy install.sh
 
       - name: version
         run: |
@@ -40,7 +39,7 @@ jobs:
           done
           bash -n /tmp/comp.bash
 
-            - name: config parsing (no sourcing)
+      - name: config parsing (no sourcing)
         run: |
           export XDG_CONFIG_HOME="$PWD/.ci-config"
           mkdir -p "$XDG_CONFIG_HOME/llama-cozy"
@@ -55,11 +54,16 @@ jobs:
           out=$(./llama-cozy config get SYSTEM_PROMPT)
           test "$out" = '$(echo pwned)'
 
-      - name: install.sh uninstall is a no-op on clean tree
+      - name: config does not execute substitutions
         run: |
-          export XDG_CONFIG_HOME="$PWD/.ci-config2"
-          export XDG_STATE_HOME="$PWD/.ci-state2"
-          ./install.sh --uninstall --yes || true
+          export XDG_CONFIG_HOME="$PWD/.ci-config-exec"
+          mkdir -p "$XDG_CONFIG_HOME/llama-cozy"
+          rm -f /tmp/llama-cozy-pwned
+          {
+            echo 'SYSTEM_PROMPT=$(touch /tmp/llama-cozy-pwned)'
+          } > "$XDG_CONFIG_HOME/llama-cozy/config"
+          ./llama-cozy config get SYSTEM_PROMPT >/dev/null
+          test ! -e /tmp/llama-cozy-pwned
 
   smoke:
     runs-on: ubuntu-latest
@@ -72,13 +76,12 @@ jobs:
           test -x .ci-prefix/bin/llama-cozy
           .ci-prefix/bin/llama-cozy --version
 
-      - name: list/show/pull dry-run without llama.cpp
+      - name: list/show without llama.cpp
         run: |
           export XDG_CONFIG_HOME="$PWD/.ci-config"
           export XDG_DATA_HOME="$PWD/.ci-data"
           export XDG_STATE_HOME="$PWD/.ci-state"
           mkdir -p "$XDG_DATA_HOME/llama-cozy/models/fake"
-          # fake model file
           : > "$XDG_DATA_HOME/llama-cozy/models/fake/Qwen3-8B-Q4_K_M.gguf"
 
           .ci-prefix/bin/llama-cozy list
