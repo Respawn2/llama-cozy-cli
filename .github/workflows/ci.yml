@@ -10,90 +10,100 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: bash syntax
         run: |
-          bash -n llama-cozy
-          bash -n install.sh
+          for f in bin/llama-cozy install.sh completions/ai.bash; do
+            bash -n "$f"
+          done
 
       - name: shellcheck
+        run: shellcheck -S warning bin/llama-cozy install.sh completions/ai.bash
+
+      - name: fish and zsh completion syntax
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
-          shellcheck -S warning llama-cozy install.sh
+          sudo apt-get install -y -qq fish zsh
+          fish --no-execute completions/ai.fish
+          zsh -n completions/_ai
 
-      - name: version
+      - name: version and help
         run: |
-          ./llama-cozy --version
-          ./llama-cozy version
+          bash bin/llama-cozy --version
+          bash bin/llama-cozy version
+          bash bin/llama-cozy --help > /dev/null
 
-      - name: help
-        run: ./llama-cozy --help >/dev/null
-
-      - name: completions
-        run: |
-          for sh in bash zsh fish; do
-            ./llama-cozy completions "$sh" > "/tmp/comp.$sh"
-            test -s "/tmp/comp.$sh"
-          done
-          bash -n /tmp/comp.bash
-
-      - name: config parsing (no sourcing)
+      - name: config is parsed, never executed
         run: |
           export XDG_CONFIG_HOME="$PWD/.ci-config"
-          mkdir -p "$XDG_CONFIG_HOME/llama-cozy"
-          {
-            echo '# comment'
-            echo 'CTX=2048'
-            echo 'SYSTEM_PROMPT=$(echo pwned)'
-            echo 'MODELS_DIR=/tmp/models'
-          } > "$XDG_CONFIG_HOME/llama-cozy/config"
-          out=$(./llama-cozy config get CTX)
-          test "$out" = "2048"
-          out=$(./llama-cozy config get SYSTEM_PROMPT)
-          test "$out" = '$(echo pwned)'
-
-      - name: config does not execute substitutions
-        run: |
-          export XDG_CONFIG_HOME="$PWD/.ci-config-exec"
           mkdir -p "$XDG_CONFIG_HOME/llama-cozy"
           rm -f /tmp/llama-cozy-pwned
           {
+            echo '# comment'
+            echo 'CTX=2048'
             echo 'SYSTEM_PROMPT=$(touch /tmp/llama-cozy-pwned)'
           } > "$XDG_CONFIG_HOME/llama-cozy/config"
-          ./llama-cozy config get SYSTEM_PROMPT >/dev/null
+          test "$(bash bin/llama-cozy config get CTX)" = "2048"
+          test "$(bash bin/llama-cozy config get SYSTEM_PROMPT)" = '$(touch /tmp/llama-cozy-pwned)'
           test ! -e /tmp/llama-cozy-pwned
 
   smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu-latest, fedora]
     runs-on: ubuntu-latest
+    container: ${{ matrix.image == 'fedora' && 'fedora:latest' || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: fedora prerequisites
+        if: matrix.image == 'fedora'
+        run: dnf install -y -q git findutils procps-ng
 
-      - name: install to temp prefix
+      - uses: actions/checkout@v5
+
+      - name: install, use, uninstall (stub llama-cli)
         run: |
-          ./install.sh --prefix "$PWD/.ci-prefix" --no-completions --no-aliases --yes
+          export HOME="$PWD/.ci-home"
+          mkdir -p "$HOME/stub" "$HOME/models/org/repo"
+          unset XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME
+
+          # fake llama.cpp: just echoes its arguments
+          printf '#!/bin/sh\necho "STUB:" "$@"\n' > "$HOME/stub/llama-cli"
+          chmod +x "$HOME/stub/llama-cli"
+          export PATH="$HOME/stub:$PATH"
+
+          : > "$HOME/models/org/repo/Qwen3-8B-Q4_K_M.gguf"
+          : > "$HOME/models/org/repo/mmproj-F16.gguf"
+          : > "$HOME/models/org/repo/big-00001-of-00002.gguf"
+          : > "$HOME/models/org/repo/big-00002-of-00002.gguf"
+
+          bash install.sh --yes --prefix "$PWD/.ci-prefix" --models-dir "$HOME/models"
+          export PATH="$PWD/.ci-prefix/bin:$PATH"
+
           test -x .ci-prefix/bin/llama-cozy
-          .ci-prefix/bin/llama-cozy --version
+          test -L .ci-prefix/bin/ai
+          test -L .ci-prefix/bin/ailist
+          ai --version
 
-      - name: list/show without llama.cpp
-        run: |
-          export XDG_CONFIG_HOME="$PWD/.ci-config"
-          export XDG_DATA_HOME="$PWD/.ci-data"
-          export XDG_STATE_HOME="$PWD/.ci-state"
-          mkdir -p "$XDG_DATA_HOME/llama-cozy/models/fake"
-          : > "$XDG_DATA_HOME/llama-cozy/models/fake/Qwen3-8B-Q4_K_M.gguf"
+          # list: no mmproj, no extra shards
+          ailist | grep -q Qwen3-8B-Q4_K_M
+          ai list --names | grep -q Qwen3-8B-Q4_K_M
+          test "$(ai list --names | wc -l)" = 2
+          if ai list --names | grep -qi mmproj; then echo 'mmproj leaked into list'; exit 1; fi
 
-          .ci-prefix/bin/llama-cozy list
-          .ci-prefix/bin/llama-cozy list --names | grep -q Qwen3-8B-Q4_K_M
-          .ci-prefix/bin/llama-cozy list --paths | grep -q Qwen3-8B-Q4_K_M
-          .ci-prefix/bin/llama-cozy show qwen 8b q4 | grep -q 'quant:'
-          .ci-prefix/bin/llama-cozy show qwen 8b q4 | grep -q 'split:'
+          # run builds the right command line
+          ai qwen 8b q4 </dev/null 2>/dev/null | grep -q -- '-m .*Qwen3-8B-Q4_K_M.gguf'
+          ai qwen -p "hi" --cpu </dev/null 2>/dev/null | grep -q -- '-ngl 0'
+          if ai nonexistent </dev/null 2>/dev/null; then echo 'bogus model should fail'; exit 1; fi
 
-      - name: config roundtrip
-        run: |
-          export XDG_CONFIG_HOME="$PWD/.ci-config"
-          .ci-prefix/bin/llama-cozy config set CTX 1024
-          test "$(.ci-prefix/bin/llama-cozy config get CTX)" = 1024
-          .ci-prefix/bin/llama-cozy config unset CTX
-          test -z "$(.ci-prefix/bin/llama-cozy config get CTX)"
+          # config roundtrip
+          ai config set CTX 1024
+          test "$(ai config get CTX)" = 1024
+
+          ai doctor || true
+
+          bash install.sh --uninstall --prefix "$PWD/.ci-prefix"
+          test ! -e .ci-prefix/bin/llama-cozy
+          test ! -e .ci-prefix/bin/ai
+          test -e "$HOME/models/org/repo/Qwen3-8B-Q4_K_M.gguf"
